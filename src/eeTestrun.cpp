@@ -61,7 +61,8 @@ int main( int argc, char *argv[] )
 //        if( pDevice->eeInit( busNo, 0x51, I2C_EE_NO_MAGIC, 3, false ) == E_I2C_SUCCESS )
         {
 fprintf(stderr, "device init success\n");
-pDevice->eeRead(1);
+unsigned char c;
+pDevice->eeRead(&c, 1);
         }
 
 //             if( pDevice->checkID( I2C_EE_MAGIC ) == E_I2C_MAGIC_FAIL )

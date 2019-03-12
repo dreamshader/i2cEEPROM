@@ -201,7 +201,7 @@ int i2cConnection::i2cProbe( int bus, int addr, uint16_t magic,
     uint16_t eeMagic;
     uint16_t eeType;
 
-fprintf(stderr, "probe for slave %02x on bus %d\n", addr, bus );
+// fprintf(stderr, "probe for slave %02x on bus %d\n", addr, bus );
 
     sprintf(devName, "/dev/i2c-%d", bus);
     devFd = open(devName, O_RDWR);
@@ -230,7 +230,7 @@ perror("i2cProbe ioctl i2c funcs!");
                                                      I2C_MAX_BLOCK_LEN, i2cId );
                 if( res < 0 )
                 {
-perror("i2c_smbus_read_i2c_block_data");
+// perror("i2c_smbus_read_i2c_block_data");
                     i2c_lastErrno = retVal = E_I2C_FAIL;
                 }
                 else
@@ -243,15 +243,17 @@ perror("i2c_smbus_read_i2c_block_data");
                     {
                         if( res == I2C_MAX_BLOCK_LEN )
                         {
+#ifdef TALK_2_ME
                             for(int i = 0; i < res; i++ )
                             {
                                 fprintf(stderr, "initial read byte %d = %02x\n", 
                                                  i, i2cId[i]);
                             }
+#endif // TALK_2_ME
 
                             getWordFromBuffer( &i2cId[0], &eeMagic );
                             getWordFromBuffer( &i2cId[2], &eeType );
-fprintf(stderr, "Initial read returns %u as magic and %u as type\n", eeMagic, eeType);
+// fprintf(stderr, "Initial read returns %u as magic and %u as type\n", eeMagic, eeType);
 
                             if( isIdValid( eeMagic ) )
                             {
@@ -266,15 +268,17 @@ fprintf(stderr, "Initial read returns %u as magic and %u as type\n", eeMagic, ee
                                     }
                                 }
 
+#ifdef TALK_2_ME
                                 for( i = 0; i < I2C_EEPROM_ID_LEN; i++ )
                                 {
 fprintf(stderr, "CheckBuffer pos %d is %02x\n", i, i2cCheckBuf[i] );
                                 }
+#endif // TALK_2_ME
 
                                 if( memcmp( i2cId, i2cCheckBuf, 
                                             I2C_EEPROM_ID_LEN ) != 0 )
                                 {
-fprintf(stderr, " CheckBuffer does not match block buffer. Assuming 16 bit adressing\n");
+// fprintf(stderr, " CheckBuffer does not match block buffer. Assuming 16 bit adressing\n");
                                     i2c_16bit_addressing = true;
                                     i2c_lastErrno = E_I2C_SUCCESS;
                                 }
@@ -636,7 +640,7 @@ int i2cConnection::readByte( int fd, uint16_t addr, void* pData )
             res = read(fd, &rdByte, 1);
             if (res < 0)
             {
-fprintf(stderr, "read failed!, res = %d\n", res);
+perror("readByte: read failed!");
                 i2c_lastErrno = retVal = E_I2C_FAIL;
             } 
             else 
@@ -711,7 +715,7 @@ int i2cConnection::writeByte( int fd, uint16_t addr, char data )
 
     if(retVal != bytes2Write)
     {
-fprintf(stderr, "writeByte failed! Wrote %d bytes of %d.\n", retVal, bytes2Write);
+perror("writeByte failed!");
         i2c_lastErrno = retVal = E_I2C_FAIL;
     } 
     else 
@@ -720,7 +724,7 @@ fprintf(stderr, "writeByte failed! Wrote %d bytes of %d.\n", retVal, bytes2Write
         i2c_lastErrno = retVal = E_I2C_SUCCESS;
         if(i2c_write_cycle_time > 0 )
         {
-fprintf(stderr, "write cycle time = %d\n", i2c_write_cycle_time );
+// fprintf(stderr, "write cycle time = %d\n", i2c_write_cycle_time );
             usleep(i2c_write_cycle_time * 1000);
         }
 

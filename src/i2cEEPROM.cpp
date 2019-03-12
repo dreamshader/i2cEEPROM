@@ -103,7 +103,7 @@ int i2cEEPROM::eeInit( int busNo, int slaveAddr, uint16_t magic, uint16_t type, 
     {
         if( (retVal = pBus->i2cProbe( busNo, slaveAddr, magic, type )) >= 0 )
         {
-fprintf(stderr, "found device bus %d, addr %02x\n", busNo, slaveAddr);
+// fprintf(stderr, "found device bus %d, addr %02x\n", busNo, slaveAddr);
             switch( retVal )
             {
                 case EE_TYPE_24AA65:
@@ -120,12 +120,12 @@ fprintf(stderr, "found device bus %d, addr %02x\n", busNo, slaveAddr);
 
                     if( magic == I2C_EE_NO_MAGIC )
                     {
-fprintf(stderr, "generic eeprom -> no private header!\n");
+// fprintf(stderr, "generic eeprom -> no private header!\n");
                         byte_offset = 0;
                     }
                     else
                     {
-fprintf(stderr, "special eeprom -> private header!\n");
+// fprintf(stderr, "special eeprom -> private header!\n");
                         byte_offset = EE_PRIVATE_HDR_LEN;
                     }
                     retVal = E_I2C_SUCCESS;
@@ -172,7 +172,7 @@ int i2cEEPROM::eeInit( int busNo, int minSlaveAddr, int maxSlaveAddr )
 
         do
         {
-fprintf(stderr, "probing bus %d, addr %02x\n", busNo, devAddr);
+// fprintf(stderr, "probing bus %d, addr %02x\n", busNo, devAddr);
             if( (retVal = pBus->i2cProbe( busNo, devAddr )) >= 0 )
             {
                 devFound = true;
@@ -182,7 +182,7 @@ fprintf(stderr, "probing bus %d, addr %02x\n", busNo, devAddr);
 
         if( devFound )
         {
-fprintf(stderr, "found device bus %d, addr %02x\n", busNo, devAddr);
+// fprintf(stderr, "found device bus %d, addr %02x\n", busNo, devAddr);
             switch( retVal )
             {
                 case EE_TYPE_24AA65:
@@ -203,7 +203,7 @@ fprintf(stderr, "found device bus %d, addr %02x\n", busNo, devAddr);
                     // ee_page_size = 8;
                     // ee_total_pages = 8 * 1024;
                     // ee_block_size = I2C_MAX_BLOCK_LEN;
-fprintf(stderr, "special eeprom -> private header!\n");
+// fprintf(stderr, "special eeprom -> private header!\n");
                     byte_offset = EE_PRIVATE_HDR_LEN;
                     retVal = E_I2C_SUCCESS;
                     break;
@@ -217,7 +217,7 @@ fprintf(stderr, "special eeprom -> private header!\n");
             if( retVal == E_I2C_SUCCESS )
             {
                 autoInit = true;
-fprintf(stderr, "device successfully opened\n");
+// fprintf(stderr, "device successfully opened\n");
             }
         }
     }
@@ -250,19 +250,37 @@ void i2cEEPROM::eeClose( void )
 
 /*
  ***************************************************************************
- * int i2cEEPROM::eeRead( int amount )
+ * int i2cEEPROM::eeRead( unsigned char* pBuffer, int amount )
  * ----------------------------------------------------
- * read amount of bytes
+ * read amount of bytes into buffer pointed by pBuffer
  * ----------------------------------------------------
  * 
  * ----------------------------------------------------
  * returns an errorcode, E_I2C_SUCCESS on success
  ***************************************************************************
 */
-int i2cEEPROM::eeRead( int amount )
+int i2cEEPROM::eeRead( unsigned char* pBuffer, int amount )
 {
-    int rc = 0;
+    int retVal = 0;
 fprintf(stderr, "called i2cEEPROM::eeRead\n"); 
-    return( rc );
+    return( retVal );
+}
+
+/*
+ ***************************************************************************
+ * int i2cEEPROM::eeWrite( unsigned char* pBuffer, int amount, uint16_t addr )
+ * ----------------------------------------------------
+ * write amount of bytes pointed by pBuffer to address addr
+ * ----------------------------------------------------
+ * 
+ * ----------------------------------------------------
+ * returns an errorcode, E_I2C_SUCCESS on success
+ ***************************************************************************
+*/
+int i2cEEPROM::eeWrite( unsigned char* pBuffer, int amount, uint16_t addr )
+{
+    int retVal = 0;
+fprintf(stderr, "called i2cEEPROM::eeWrite\n"); 
+    return( retVal );
 }
 

@@ -84,7 +84,8 @@ class i2cEEPROM {
 
         void eeClose( void );
 
-        int eeRead( int amount );
+        int eeRead( unsigned char* pBuffer, int amount );
+        int eeWrite( unsigned char* pBuffer, int amount, uint16_t addr );
 };
 
 
