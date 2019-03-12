@@ -50,23 +50,39 @@ extern "C" {
 #define E_EE_IOCTL          -7
 #define E_EE_VERIFY         -8
 
+#define EE_PRIVATE_HDR_LEN   6
+
+#define EE_TYPE_24AA65              1
+#define EE_TYPE_24LC65              2
+#define EE_TYPE_24C65               3
+#define WRITE_CYCLE_TIME_24C65      5
+#define BUS_FREQUENCY_1V8_24C65   100
+#define BUS_FREQUENCY_4V5_24C65   400
+#define PAGE_SIZE_24C65             8
+#define TOTAL_PAGES_24C65         (8 * 1024)
+#define BLOCK_SIZE_24C65          I2C_MAX_BLOCK_LEN
+
 
 class i2cEEPROM {
 
     private:
         i2cConnection *pBus;
         bool autoInit;
+        int byte_offset;
 
     public:
-
-        int page_size;
+        unsigned int ee_page_size;
+        unsigned int ee_total_pages;
+        unsigned int ee_block_size;
 
         i2cEEPROM();
         ~i2cEEPROM();
-        int init( int busNo, int slaveAddr, uint16_t magic, uint16_t type );
-        int init( int busNo, int minSlaveAddr, int maxSlaveAddr );
 
-        void close( void );
+        int eeInit( int busNo, int slaveAddr, uint16_t magic, 
+                    uint16_t type, bool initialize );
+        int eeInit( int busNo, int minSlaveAddr, int maxSlaveAddr );
+
+        void eeClose( void );
 
         int eeRead( int amount );
 };

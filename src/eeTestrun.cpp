@@ -52,8 +52,13 @@ int main( int argc, char *argv[] )
 
     if( (pDevice = new i2cEEPROM()) != NULL )
     {
-        if( pDevice->init( busNo, I2C_MIN_SLAVE_ADDR, 
-                           I2C_MAX_SLAVE_ADDR ) == E_I2C_SUCCESS )
+        if( pDevice->eeInit( busNo, I2C_MIN_SLAVE_ADDR, 
+                             I2C_MAX_SLAVE_ADDR ) == E_I2C_SUCCESS )
+
+//        if( pDevice->eeInit( busNo, 0x51, I2C_EE_MAGIC, 0, false ) == E_I2C_SUCCESS )
+
+
+//        if( pDevice->eeInit( busNo, 0x51, I2C_EE_NO_MAGIC, 3, false ) == E_I2C_SUCCESS )
         {
 fprintf(stderr, "device init success\n");
 pDevice->eeRead(1);
@@ -66,7 +71,7 @@ pDevice->eeRead(1);
 //             }
 // 
  fprintf(stderr, "close device\n");
-             pDevice->close();
+             pDevice->eeClose();
 
         delete pDevice;
     }

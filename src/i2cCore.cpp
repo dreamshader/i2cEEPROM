@@ -59,16 +59,16 @@
 bool isBigEndian()
 {
     uint16_t word = 1;
-    char* pWord = (char*) &pWord;
+    char* pWord = (char*) &word;
 
     if( pWord[0] == 0 )
     {
-fprintf(stderr, "isBigEndian = true\n");
+// fprintf(stderr, "isBigEndian = true\n");
         return( true );
     }
     else
     {
-fprintf(stderr, "isBigEndian = false\n");
+// fprintf(stderr, "isBigEndian = false\n");
         return( false );
     }
 }
@@ -110,7 +110,7 @@ void getWordFromBuffer( uint8_t* pBuf, uint16_t* pWord )
         }
         else
         {
-            *pWord = (*pBuf & 0xff) << 8 | *(pBuf+1) & 0xff;
+            *pWord = ((*pBuf & 0xff) << 8) | (*(pBuf+1) & 0xff);
         }
     }
 }
@@ -178,7 +178,8 @@ i2cConnection::~i2cConnection()
 
 /*
  ***************************************************************************
- * int i2cConnection::i2cProbe( int bus, int addr )
+ * int i2cConnection::i2cProbe( int busNo, int addr, uint16_t magic, 
+ *                              uint16_t type )
  * ----------------------------------------------------
  * Probe for the slave device with address addr on bus bus
  * ----------------------------------------------------
@@ -188,14 +189,14 @@ i2cConnection::~i2cConnection()
  * returns an errorcode, E_I2C_SUCCESS on success
  ***************************************************************************
 */
-int i2cConnection::i2cProbe( int bus, int addr )
+int i2cConnection::i2cProbe( int bus, int addr, uint16_t magic, 
+                             uint16_t type )
 {
     char devName[I2C_MAX_DEVNAME_LEN];
     int devFd;
     int retVal = E_I2C_SUCCESS;
     uint8_t i2cId[I2C_MAX_BLOCK_LEN];
     uint8_t i2cCheckBuf[I2C_EEPROM_ID_LEN];
-    uint8_t c;
 
     uint16_t eeMagic;
     uint16_t eeType;
@@ -207,80 +208,94 @@ fprintf(stderr, "probe for slave %02x on bus %d\n", addr, bus );
 
     if( devFd > 0 )
     {
-        if( (retVal = ioctl(devFd, I2C_SLAVE, addr)) < 0) 
-        {
-perror("i2cProbe ioctl");
+	// get funcs list
+	if((retVal = ioctl(devFd, I2C_FUNCS, &i2c_funcs) < 0))
+	{
+perror("i2cProbe ioctl i2c funcs!");
             i2c_lastErrno = errno;
             retVal = E_I2C_IOCTL;
-        }
+	}
         else
         {
-//            retVal = readByte( devFd, 0, &c );
-
-            __s32 res;
-            res = i2c_smbus_read_i2c_block_data( devFd, 0x00, 
-                                                 I2C_MAX_BLOCK_LEN, i2cId );
-            if( res < 0 )
+            if( (retVal = ioctl(devFd, I2C_SLAVE, addr)) < 0) 
             {
-perror("i2c_smbus_read_i2c_block_data");
-                i2c_lastErrno = retVal = E_I2C_FAIL;
+ perror("i2cProbe ioctl slave addr");
+                i2c_lastErrno = errno;
+                retVal = E_I2C_IOCTL;
             }
             else
             {
-
-                if( res == I2C_MAX_BLOCK_LEN )
+                __s32 res;
+                res = i2c_smbus_read_i2c_block_data( devFd, 0x00, 
+                                                     I2C_MAX_BLOCK_LEN, i2cId );
+                if( res < 0 )
                 {
-                    for(int i = 0; i < res; i++ )
-                    {
-                        fprintf(stderr, "initial read byte %d = %02x\n", 
-                                         i, i2cId[i]);
-                    }
-
-                    getWordFromBuffer( &i2cId[0], &eeMagic );
-                    getWordFromBuffer( &i2cId[2], &eeType );
-fprintf(stderr, "Initial read returns %u as magic and %u as type\n", eeMagic, eeType);
-
-                    if( isIdValid( eeMagic ) )
-                    {
-fprintf(stderr, "Found valid signature!\n");
-                        int rc;
-                        char i;
-                        for( rc = 0, i = 0; rc > 0 && i < I2C_EEPROM_ID_LEN; i++ )
-                        {
-                            if( (rc = write( devFd, &i, 1 )) > 0 )
-                            {
-                                rc = read( devFd, &i2cCheckBuf[i], 1 );
-                            }
-                        }
-
-                        for( i = 0; i < I2C_EEPROM_ID_LEN; i++ )
-                        {
-fprintf(stderr, "CheckBuffer pos %d is %02x\n", i, i2cCheckBuf[i] );
-                        }
-
-                        if( memcmp( i2cId, i2cCheckBuf, 
-                                    I2C_EEPROM_ID_LEN ) != 0 )
-                        {
-fprintf(stderr, " CheckBuffer does not match block buffer. Assuming 16 bit adressing\n");
-                            i2c_16bit_addressing = true;
-                            i2c_lastErrno = E_I2C_SUCCESS;
-                        }
-                        else
-                        {
-                            i2c_16bit_addressing = false;
-                            i2c_lastErrno = E_I2C_SUCCESS;
-                        }
-
-                        retVal = (int) eeType;
-                    }
-                    else
-                    {
-                        i2c_lastErrno = retVal = E_I2C_MAGIC_FAIL;
-                    }
+perror("i2c_smbus_read_i2c_block_data");
+                    i2c_lastErrno = retVal = E_I2C_FAIL;
                 }
                 else
                 {
-                    i2c_lastErrno = retVal = E_I2C_FAIL;
+                    if( magic == I2C_EE_NO_MAGIC )
+                    {
+                        retVal = type;
+                    }
+                    else
+                    {
+                        if( res == I2C_MAX_BLOCK_LEN )
+                        {
+                            for(int i = 0; i < res; i++ )
+                            {
+                                fprintf(stderr, "initial read byte %d = %02x\n", 
+                                                 i, i2cId[i]);
+                            }
+
+                            getWordFromBuffer( &i2cId[0], &eeMagic );
+                            getWordFromBuffer( &i2cId[2], &eeType );
+fprintf(stderr, "Initial read returns %u as magic and %u as type\n", eeMagic, eeType);
+
+                            if( isIdValid( eeMagic ) )
+                            {
+                                int rc;
+                                int i;
+                                for( rc = 0, i = 0; rc > 0 && 
+                                                    i < I2C_EEPROM_ID_LEN; i++ )
+                                {
+                                    if( (rc = write( devFd, (char*) &i, 1 )) > 0 )
+                                    {
+                                        rc = read( devFd, &i2cCheckBuf[i], 1 );
+                                    }
+                                }
+
+                                for( i = 0; i < I2C_EEPROM_ID_LEN; i++ )
+                                {
+fprintf(stderr, "CheckBuffer pos %d is %02x\n", i, i2cCheckBuf[i] );
+                                }
+
+                                if( memcmp( i2cId, i2cCheckBuf, 
+                                            I2C_EEPROM_ID_LEN ) != 0 )
+                                {
+fprintf(stderr, " CheckBuffer does not match block buffer. Assuming 16 bit adressing\n");
+                                    i2c_16bit_addressing = true;
+                                    i2c_lastErrno = E_I2C_SUCCESS;
+                                }
+                                else
+                                {
+                                    i2c_16bit_addressing = false;
+                                    i2c_lastErrno = E_I2C_SUCCESS;
+                                }
+    
+                                retVal = (int) eeType;
+                            }
+                            else
+                            {
+                                i2c_lastErrno = retVal = E_I2C_MAGIC_FAIL;
+                            }
+                        }
+                        else
+                        {
+                            i2c_lastErrno = retVal = E_I2C_FAIL;
+                        }
+                    }
                 }
             }
         }
@@ -295,29 +310,22 @@ fprintf(stderr, " CheckBuffer does not match block buffer. Assuming 16 bit adres
     return( retVal );
 }
 
-#if 0
-	// get funcs list
-	if((r = ioctl(fd, I2C_FUNCS, &funcs) < 0))
-	{
-		fprintf(stderr, "Error eeprom_open: %s\n", strerror(errno));
-		return -1;
-	}
-#define CHECK_I2C_FUNC( var, label ) \
-	do { 	if(0 == (var & label)) { \
-		fprintf(stderr, "\nError: " \
-			#label " function is required. Program halted.\n\n"); \
-		exit(1); } \
-	} while(0);
-
-	
-	// check for req funcs
-	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_READ_BYTE );
-	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_WRITE_BYTE );
-	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_READ_BYTE_DATA );
-	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_WRITE_BYTE_DATA );
-	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_READ_WORD_DATA );
-	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_WRITE_WORD_DATA );
-#endif
+/*
+ ***************************************************************************
+ * int i2cConnection::i2cProbe( int bus, int addr )
+ * ----------------------------------------------------
+ * Probe for the slave device with address addr on bus bus
+ * ----------------------------------------------------
+ * int bus    : bus to use
+ * int addr   : slave addr to connect to
+ * ----------------------------------------------------
+ * returns an errorcode, E_I2C_SUCCESS on success
+ ***************************************************************************
+*/
+int i2cConnection::i2cProbe( int busNo, int slaveAddr )
+{
+    return( i2cProbe( busNo, slaveAddr, I2C_EE_MAGIC, -1 ));
+}
 
 /*
  ***************************************************************************
@@ -469,11 +477,6 @@ int i2cConnection::i2cClose( void )
     return( retVal );
 }
 
-
-
-
-
-
 /*
  ***************************************************************************
  * int i2cConnection::readWord( uint16_t addr, void* pData )
@@ -620,7 +623,6 @@ int i2cConnection::readByte( uint16_t addr, void* pData )
 int i2cConnection::readByte( int fd, uint16_t addr, void* pData )
 {
 
-    __u8 reg = 0x00; /* Device register to access */
     __s32 res;
     int retVal;
     char* pDataOut;
@@ -634,7 +636,7 @@ int i2cConnection::readByte( int fd, uint16_t addr, void* pData )
             res = read(fd, &rdByte, 1);
             if (res < 0)
             {
-fprintf(stderr, "read failed!, res = %ld\n", res);
+fprintf(stderr, "read failed!, res = %d\n", res);
                 i2c_lastErrno = retVal = E_I2C_FAIL;
             } 
             else 
@@ -729,67 +731,6 @@ fprintf(stderr, "write cycle time = %d\n", i2c_write_cycle_time );
 
 /*
  ***************************************************************************
- * int i2cConnection::checkID( void )
- * ----------------------------------------------------
- * check for magic and eeprom Id
- * ----------------------------------------------------
- * 
- * ----------------------------------------------------
- * returns an errorcode, E_I2C_SUCCESS on success
- ***************************************************************************
-*/
-int i2cConnection::checkID( uint16_t eeMagic )
-{
-
-    int retVal;
-    uint16_t magic;
-    uint16_t eeId;
-
-    int write_cycle_time;
-    int bus_frequency_1V8;
-    int bus_frequency_4V5;
-    int page_size;
-
-    if( (retVal = readWord( (uint16_t) 0, &magic )) == E_I2C_SUCCESS )
-    {
-        retVal = readWord( (uint16_t) 2, &eeId );
-        if( retVal == E_I2C_SUCCESS )
-        {
-fprintf(stderr, "checkID %02x\n", magic);
-fprintf(stderr, "checkID %02x\n", eeId);
-            if( magic == eeMagic )
-            {
-fprintf(stderr, "magic MATCH!\n");
-                switch( eeId )
-                {
-                    case EE_TYPE_24AA65:
-                    case EE_TYPE_24LC65:
-                        retVal = E_I2C_EE_NOTSUPPORTED;
-                        break;
-                    case EE_TYPE_24C65:
-                        write_cycle_time = 5;
-                        bus_frequency_1V8 = 100;
-                        bus_frequency_4V5 = 400;
-                        page_size = 8;
-                        break;
-                    default:
-                        retVal = E_I2C_EE_INVAL_ID;
-                        break;
-                }
-            }
-            else
-            {
-fprintf(stderr, "magic check FAILED!\n");
-                retVal = E_I2C_MAGIC_FAIL;
-            }
-        }
-    }
-
-    return( retVal );
-}
-
-/*
- ***************************************************************************
  * int i2cConnection::initID( void )
  * ----------------------------------------------------
  * write current magic and eeprom Id
@@ -801,9 +742,6 @@ fprintf(stderr, "magic check FAILED!\n");
 */
 int i2cConnection::initID( uint16_t eeMagic, uint16_t eeType )
 {
-
-    __u8 reg = 0x00; /* Device register to access */
-    __s32 res;
     int retVal;
     char wrBuffer[I2C_EEPROM_ID_LEN];
 
@@ -876,88 +814,5 @@ int i2cConnection::initID( uint16_t eeMagic, uint16_t eeType )
     }
     return( retVal );
 }
-
-
-
-
-
-#ifdef NEVERDEF
-
-
-Full interface description
-==========================
-
-The following IOCTLs are defined:
-
-ioctl(file, I2C_SLAVE, long addr)
-  Change slave address. The address is passed in the 7 lower bits of the
-  argument (except for 10 bit addresses, passed in the 10 lower bits in this
-  case).
-
-ioctl(file, I2C_TENBIT, long select)
-  Selects ten bit addresses if select not equals 0, selects normal 7 bit
-  addresses if select equals 0. Default 0.  This request is only valid
-  if the adapter has I2C_FUNC_10BIT_ADDR.
-
-ioctl(file, I2C_PEC, long select)
-  Selects SMBus PEC (packet error checking) generation and verification
-  if select not equals 0, disables if select equals 0. Default 0.
-  Used only for SMBus transactions.  This request only has an effect if the
-  the adapter has I2C_FUNC_SMBUS_PEC; it is still safe if not, it just
-  doesn t have any effect.
-
-ioctl(file, I2C_FUNCS, unsigned long *funcs)
-  Gets the adapter functionality and puts it in *funcs.
-
-ioctl(file, I2C_RDWR, struct i2c_rdwr_ioctl_data *msgset)
-  Do combined read/write transaction without stop in between.
-  Only valid if the adapter has I2C_FUNC_I2C.  The argument is
-  a pointer to a
-
-  struct i2c_rdwr_ioctl_data {
-      struct i2c_msg *msgs;  /* ptr to array of simple messages */
-      int nmsgs;             /* number of messages to exchange */
-  }
-
-  The msgs[] themselves contain further pointers into data buffers.
-  The function will write or read data to or from that buffers depending
-  on whether the I2C_M_RD flag is set in a particular message or not.
-  The slave address and whether to use ten bit address mode has to be
-  set in each message, overriding the values set with the above ioctl s.
-
-ioctl(file, I2C_SMBUS, struct i2c_smbus_ioctl_data *args)
-  If possible, use the provided i2c_smbus_* methods described below instead
-  of issuing direct ioctls.
-
-You can do plain i2c transactions by using read(2) and write(2) calls.
-You do not need to pass the address byte; instead, set it through
-ioctl I2C_SLAVE before you try to access the device.
-
-You can do SMBus level transactions (see documentation file smbus-protocol
-for details) through the following functions:
-  __s32 i2c_smbus_write_quick(int file, __u8 value);
-  __s32 i2c_smbus_read_byte(int file);
-  __s32 i2c_smbus_write_byte(int file, __u8 value);
-  __s32 i2c_smbus_read_byte_data(int file, __u8 command);
-  __s32 i2c_smbus_write_byte_data(int file, __u8 command, __u8 value);
-  __s32 i2c_smbus_read_word_data(int file, __u8 command);
-  __s32 i2c_smbus_write_word_data(int file, __u8 command, __u16 value);
-  __s32 i2c_smbus_process_call(int file, __u8 command, __u16 value);
-  __s32 i2c_smbus_read_block_data(int file, __u8 command, __u8 *values);
-  __s32 i2c_smbus_write_block_data(int file, __u8 command, __u8 length,
-                                   __u8 *values);
-All these transactions return -1 on failure; you can read errno to see
-what happened. The 'write' transactions return 0 on success; the
-'read' transactions return the read value, except for read_block, which
-returns the number of values read. The block buffers need not be longer
-than 32 bytes.
-
-The above functions are made available by linking against the libi2c library,
-which is provided by the i2c-tools project.  See:
-https://git.kernel.org/pub/scm/utils/i2c-tools/i2c-tools.git/.
-
-
-
-#endif // NEVERDEF
 
 
