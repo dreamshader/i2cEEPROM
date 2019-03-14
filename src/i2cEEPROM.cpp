@@ -130,6 +130,26 @@ int i2cEEPROM::eeInit( int busNo, int slaveAddr, uint16_t magic, uint16_t type, 
                     }
                     retVal = E_I2C_SUCCESS;
                     break;
+                case EE_TYPE_24C16:
+                    pBus->i2c_write_cycle_time  = WRITE_CYCLE_TIME_24C16;
+                    pBus->i2c_bus_frequency_1V8 = BUS_FREQUENCY_1V8_24C16;
+                    pBus->i2c_bus_frequency_4V5 = BUS_FREQUENCY_4V5_24C16;
+                    ee_page_size   = PAGE_SIZE_24C16;
+                    ee_total_pages = TOTAL_PAGES_24C16;
+                    ee_block_size  = BLOCK_SIZE_24C16;
+
+                    if( magic == I2C_EE_NO_MAGIC )
+                    {
+// fprintf(stderr, "generic eeprom -> no private header!\n");
+                        byte_offset = 0;
+                    }
+                    else
+                    {
+// fprintf(stderr, "special eeprom -> private header!\n");
+                        byte_offset = EE_PRIVATE_HDR_LEN;
+                    }
+                    retVal = E_I2C_SUCCESS;
+                    break;
                 default:
                     retVal = E_I2C_EE_INVAL_ID;
                     break;

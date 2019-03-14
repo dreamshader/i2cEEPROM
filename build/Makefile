@@ -2,6 +2,7 @@ SHELL := /bin/bash
 #################################################################################
 # Makefile for i2cEEPROM - a library for transparent access to I2C EEPROMs
 #
+# benoetigt sudo apt-get install libi2c.dev
 #################################################################################
 # This Makefile is part of my i2cEEPROM project
 #	https://github.com/dreamshader/i2cEEPROM
@@ -72,6 +73,8 @@ $(SOLIBNAME):	$(LIB_OBJ)
 	$(CXX) $(CXXFLAGS) $(CXXEXTRAFLAGS) $(CXXDEBUG) $(CXXLIBSOFLAGS) -c $(LIB_SRC)
 	$(CXX) -shared  -Wl,-soname,$(SOLIBNAME) -o $(SOLIBNAME) $(LIB_OBJ)
 
+$(LIB_OBJ):
+	$(CXX) $(CXXFLAGS) $(CXXEXTRAFLAGS) -c $(LIB_SRC)
 
 $(EXAMPLE_NAME): $(EXAMPLE_SRC) $(STATLIBNAME) $(SOLIBNAME)
 	$(CXX) -o $(EXAMPLE_NAME) $(CXXDEBUG) $(CXXEXTRAFLAGS) $(EXAMPLE_SRC) $(SOLIBNAME) $(BUILD_FLAGS) ${EXTRALIBS}

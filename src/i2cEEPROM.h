@@ -54,6 +54,7 @@ extern "C" {
 
 #define EE_TYPE_24AA65              1
 #define EE_TYPE_24LC65              2
+
 #define EE_TYPE_24C65               3
 #define WRITE_CYCLE_TIME_24C65      5
 #define BUS_FREQUENCY_1V8_24C65   100
@@ -62,6 +63,13 @@ extern "C" {
 #define TOTAL_PAGES_24C65         (8 * 1024)
 #define BLOCK_SIZE_24C65          I2C_MAX_BLOCK_LEN
 
+#define EE_TYPE_24C16               4
+#define WRITE_CYCLE_TIME_24C16      5
+#define BUS_FREQUENCY_1V8_24C16   100
+#define BUS_FREQUENCY_4V5_24C16   400
+#define PAGE_SIZE_24C16             8
+#define TOTAL_PAGES_24C16         (2 * 1024)
+#define BLOCK_SIZE_24C16          I2C_MAX_BLOCK_LEN
 
 class i2cEEPROM {
 
