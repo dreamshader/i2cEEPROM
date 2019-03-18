@@ -50,12 +50,15 @@ extern "C" {
 #define E_EE_IOCTL          -7
 #define E_EE_VERIFY         -8
 
-#define EE_PRIVATE_HDR_LEN   6
+#define EE_PRIVATE_HDR_LEN   4
 
 #define EE_TYPE_24AA65              1
+#define EE_NAMES_24AA65             "24AA65"
 #define EE_TYPE_24LC65              2
+#define EE_NAMES_24LC65             "24LC65"
 
 #define EE_TYPE_24C65               3
+#define EE_NAMES_24C65              "24C65"
 #define WRITE_CYCLE_TIME_24C65      5
 #define BUS_FREQUENCY_1V8_24C65   100
 #define BUS_FREQUENCY_4V5_24C65   400
@@ -64,12 +67,19 @@ extern "C" {
 #define BLOCK_SIZE_24C65          I2C_MAX_BLOCK_LEN
 
 #define EE_TYPE_24C16               4
+#define EE_NAMES_24C16              "24C16"
 #define WRITE_CYCLE_TIME_24C16      5
 #define BUS_FREQUENCY_1V8_24C16   100
 #define BUS_FREQUENCY_4V5_24C16   400
 #define PAGE_SIZE_24C16             8
 #define TOTAL_PAGES_24C16         (2 * 1024)
 #define BLOCK_SIZE_24C16          I2C_MAX_BLOCK_LEN
+
+#define EE_TYPE_MAX_TYPE          99
+
+// ATMLU940 -> 0x50
+// 24C65 -> 0x51
+// 24C16 -> 0x50-0x57 broadcast
 
 class i2cEEPROM {
 
@@ -89,6 +99,8 @@ class i2cEEPROM {
         int eeInit( int busNo, int slaveAddr, uint16_t magic, 
                     uint16_t type, bool initialize );
         int eeInit( int busNo, int minSlaveAddr, int maxSlaveAddr );
+
+        int eeOpen( int busNo, int slaveAddr );
 
         void eeClose( void );
 

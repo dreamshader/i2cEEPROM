@@ -270,6 +270,33 @@ void i2cEEPROM::eeClose( void )
 
 /*
  ***************************************************************************
+ * int i2cEEPROM::eeOpen( int busNo, int slaveAddr )
+ * ----------------------------------------------------
+ * open handle to an i2c device
+ * ----------------------------------------------------
+ * 
+ * ----------------------------------------------------
+ * returns E_EE_SUCCESS or an error code
+ ***************************************************************************
+*/
+int i2cEEPROM::eeOpen( int busNo, int slaveAddr )
+{
+    int retVal;
+
+    if( (pBus = new i2cConnection()) != NULL )
+    {
+        retVal = pBus->i2cOpen( busNo, slaveAddr, false, O_RDWR );
+    }
+    else
+    {
+        retVal = E_I2C_FAIL;
+    }
+
+    return( retVal );
+}
+
+/*
+ ***************************************************************************
  * int i2cEEPROM::eeRead( unsigned char* pBuffer, int amount )
  * ----------------------------------------------------
  * read amount of bytes into buffer pointed by pBuffer

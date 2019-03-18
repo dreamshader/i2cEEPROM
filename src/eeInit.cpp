@@ -31,47 +31,43 @@
  *
  * Options:
  *
- * -------------- communication port for connection --------------------
+ * ------------------------- EEPROM type -------------------------------
  *
- * --com devicename (same as --com=devicename resp. -c devicename)
+ * --type <type> (same as --type=<type> resp. -t <type>)
  *
- *   Default is --com=/dev/ttyUSB0
+ * ------------------------- magic word --------------------------------
  *
- * ---------------- baudrate for serial connection ---------------------
+ * --magic <word> (same as --magic=<word> resp. -m <word>)
  *
- * --baud baudrate (same as --baud=baudrate resp. -b baudrate)
+ * --------------------- I2C slave address -----------------------------
  *
- *   Default is --baud=38400
+ * --address <addr> (same as --address=<addr> resp. -a <addr>)
  *
- * ---------------- databit for serial connection ----------------------
+ * ---------------------- I2C bus number -------------------------------
  *
- * --data bits (same as --data=bits resp. -d bits)
- *            may be 5 up to 8
+ * --bus <bus #> (same as --bus=<bus #> resp. -b <bus #>)
  *
- *   Default is --data=8
+ * ---------------------- list known types -----------------------------
  *
- * ---------------- parity for serial connection -----------------------
+ * --list (same as -l)
  *
- * --parity parity (same as --parity=parity resp. -p parity)
- *            may be e/E (even), o/O (odd), n/N (none)
+ * ------------------------ display info -------------------------------
  *
- *   Default is --parity=n
+ * --info (same as -i)
  *
- * --------------- stoppbits for serial connection ---------------------
+ * ------------------------ force action--------------------------------
  *
- * --stop stoppbits (same as --stop=stoppbits resp. -s stoppbits)
- *            may be 1 or 2
+ * --force (same as -f)
  *
- *   Default is --stop=1
+ * ------------------------ verbose output------------------------------
  *
- * --------------- handshake for serial connection ---------------------
+ * --verbose (same as -v)
  *
- * --handshake handshake (same as --handshake=handshake resp. -h handshake)
- *            may be n/N (no handshake), x/X (XON/XOFF)
+ * ---------------------------- check ----------------------------------
  *
- *   Default is --handshake=n
+ * --check (same as -c)
  *
- * ----------------------------- help ----------------------------------
+ * ---------------------------- help -----------------------------------
  *
  * --help     (same as -? )
  *
@@ -94,73 +90,47 @@
 
 #include "i2cEEPROM.h"
 
-#define I2C_MIN_SLAVE_ADDR     0x50
-#define I2C_MAX_SLAVE_ADDR     0x57
+#define OPTION_TYPE_SET     0x0001
+#define OPTION_MAGIC_SET    0x0002
+#define OPTION_ADDR_SET     0x0004
+#define OPTION_BUS_SET      0x0008
+#define OPTION_LIST_SET     0x0010
+#define OPTION_INFO_SET     0x0020
+#define OPTION_FORCE_SET    0x0040
+#define OPTION_VERBOSE_SET  0x0080
+#define OPTION_CHECK_SET    0x0100
 
 struct _caller_options {
     uint16_t eeTypeOpt;
     uint16_t eeMagicOpt;
     uint16_t eeSlaveAddrOpt;
     uint8_t  eeBusNoOpt;
+    uint16_t eeOptFlags;
+    bool     eeListOpt;
     bool     eeInfoOpt;
     bool     eeForceOpt;
     bool     eeVerboseOpt;
     bool     eeCheckOopt;
 };
 
-int main( int argc, char *argv[] )
-{
-    struct _caller_options param;
-    i2cEEPROM *pDevice;
-
-    resetArgs( &param );
-    get_arguments( argc, argv, &param );
-
-    if( (pDevice = new i2cEEPROM()) != NULL )
-    {
-        if( pDevice->eeInit( busNo, I2C_MIN_SLAVE_ADDR, 
-                             I2C_MAX_SLAVE_ADDR ) == E_I2C_SUCCESS )
-
-//        if( pDevice->eeInit( busNo, 0x51, I2C_EE_MAGIC, 0, false ) == E_I2C_SUCCESS )
-
-
-//        if( pDevice->eeInit( busNo, 0x51, I2C_EE_NO_MAGIC, 3, false ) == E_I2C_SUCCESS )
-        {
-fprintf(stderr, "device init success\n");
-unsigned char c;
-pDevice->eeRead(&c, 1);
-        }
-
-//             if( pDevice->checkID( I2C_EE_MAGIC ) == E_I2C_MAGIC_FAIL )
-//             {
-// fprintf(stderr, "device magic failed\n");
-//                     pDevice->initID( I2C_EE_MAGIC, EE_TYPE_24C65) ;
-//             }
-// 
- fprintf(stderr, "close device\n");
-             pDevice->eeClose();
-
-        delete pDevice;
-    }
-
-    return(0);
-
-}
-
-
-/* ---------------------------------------------------------------------------------
- | void help( struct serial_param_t *ctl_param, short failed )
+/* -------------------------------------------------------------------------
+ | void help( void )
  |
- | show options. If failed, print an error message, too
- -----------------------------------------------------------------------------------
+ | print help screen and exit
+ ---------------------------------------------------------------------------
 */
-
 void help( void )
 {
     fprintf(stderr, "HELP!\n");
     exit(0);
 }
 
+/* -------------------------------------------------------------------------
+ | void dumpArgs( struct _caller_options *pParam )
+ |
+ | print given option and argument settings
+ ---------------------------------------------------------------------------
+*/
 void dumpArgs( struct _caller_options *pParam )
 {
     if( pParam != NULL )
@@ -169,6 +139,9 @@ void dumpArgs( struct _caller_options *pParam )
         fprintf(stderr, "Magic ......: %04x\n", pParam->eeMagicOpt );
         fprintf(stderr, "Slave addr. : %02x\n", pParam->eeSlaveAddrOpt );
         fprintf(stderr, "Bus No. ....: %d\n",   pParam->eeBusNoOpt );
+        fprintf(stderr, "Flags ......: %04x\n", pParam->eeOptFlags);
+        fprintf(stderr, "List .......: %s\n", 
+                pParam->eeListOpt == true ? "true" : "false" );
         fprintf(stderr, "Info .......: %s\n", 
                 pParam->eeInfoOpt == true ? "true" : "false" );
         fprintf(stderr, "Force ......: %s\n", 
@@ -182,6 +155,12 @@ void dumpArgs( struct _caller_options *pParam )
 }
 
 
+/* -------------------------------------------------------------------------
+ | void resetArgs( struct _caller_options *pParam )
+ |
+ | reset options to defaults
+ ---------------------------------------------------------------------------
+*/
 void resetArgs( struct _caller_options *pParam )
 {
     if( pParam != NULL )
@@ -190,6 +169,8 @@ void resetArgs( struct _caller_options *pParam )
         pParam->eeMagicOpt     = 0xffff;
         pParam->eeSlaveAddrOpt = 0xffff;
         pParam->eeBusNoOpt     = 0xff;
+        pParam->eeOptFlags     = 0;
+        pParam->eeListOpt      = false;
         pParam->eeInfoOpt      = false;
         pParam->eeForceOpt     = false;
         pParam->eeVerboseOpt   = false;
@@ -197,22 +178,19 @@ void resetArgs( struct _caller_options *pParam )
     }
 }
 
-/* ---------------------------------------------------------------------------------
- | void get_arguments ( int argc, char **argv, struct serial_param_t *ctl_param, 
- |                      short *myst)
+/* -------------------------------------------------------------------------
+ | void get_arguments(int argc, char **argv, struct _caller_options *pParam)
  |
  | scan commandline for arguments an set the corresponding value
- | myst is a short pointer to a secret flag
- -----------------------------------------------------------------------------------
+ ---------------------------------------------------------------------------
 */
-
 void get_arguments ( int argc, char **argv, struct _caller_options *pParam )
 {
 
     int failed = 0;
     int next_option;
     /* valid short options letters */
-    const char* const short_options = "t:m:a:b:ifvch?";
+    const char* const short_options = "t:m:a:b:lifvch?";
 
     if( pParam != NULL )
     {
@@ -223,6 +201,7 @@ void get_arguments ( int argc, char **argv, struct _caller_options *pParam )
              { "magic",   1, NULL, 'm' },
              { "address", 1, NULL, 'a' },
              { "bus",     1, NULL, 'b' },
+             { "list",    0, NULL, 'l' },
              { "info",    0, NULL, 'i' },
              { "force",   0, NULL, 'f' },
              { "verbose", 0, NULL, 'v' },
@@ -241,40 +220,238 @@ void get_arguments ( int argc, char **argv, struct _caller_options *pParam )
             switch (next_option) {
                 case 't':
                     pParam->eeTypeOpt = atoi(optarg);
+                    pParam->eeOptFlags |= OPTION_TYPE_SET;
                     break;
                 case 'm':
                     sscanf(optarg, "%x", &pParam->eeMagicOpt);
+                    pParam->eeOptFlags |= OPTION_MAGIC_SET;
                     break;
                 case 'a':
                     sscanf(optarg, "%x", &pParam->eeSlaveAddrOpt);
+                    pParam->eeOptFlags |= OPTION_ADDR_SET;
                     break;
                 case 'b':
                     pParam->eeBusNoOpt = atoi(optarg);
+                    pParam->eeOptFlags |= OPTION_BUS_SET;
+                    break;
+                case 'l':
+                    pParam->eeListOpt = true;
+                    pParam->eeOptFlags |= OPTION_LIST_SET;
                     break;
                 case 'i':
                     pParam->eeInfoOpt = true;
+                    pParam->eeOptFlags |= OPTION_INFO_SET;
                     break;
                 case 'f':
                     pParam->eeForceOpt = true;
+                    pParam->eeOptFlags |= OPTION_FORCE_SET;
                     break;
                 case 'v':
                     pParam->eeVerboseOpt = true;
+                    pParam->eeOptFlags |= OPTION_VERBOSE_SET;
                     break;
                 case 'c':
                     pParam->eeCheckOopt = true;
+                    pParam->eeOptFlags |= OPTION_CHECK_SET;
                     break;
                 case 'h':
                 case '?':
+                    help();
                     dumpArgs( pParam );
                     // help();
                     break;
                 default:
-                    fprintf(stderr, "Invalid option %c! \n", next_option);
-                    help();
+                    break;
             }
         } while (next_option != -1);
     }
 
+}
+
+#define ERROR_NULL  -1
+
+int listKnownTypes( i2cEEPROM *pDevice, struct _caller_options *pParam )
+{
+    int retVal = 0;
+    int eeType;
+
+    for( eeType = 0; eeType < EE_TYPE_MAX_TYPE; eeType++ )
+    {
+        switch( eeType )
+        {  
+            case EE_TYPE_24AA65:
+//                printf("Type %2d:\n", eeType);
+//                printf("\t%s\n", EE_NAMES_24AA65);
+                printf("Type %2d: %s\n", eeType, EE_NAMES_24AA65);
+                break;
+            case EE_TYPE_24LC65:
+//                printf("Type %2d:\n", eeType);
+//                printf("\t%s\n", EE_NAMES_24LC65);
+                printf("Type %2d: %s\n", eeType, EE_NAMES_24LC65);
+                break;
+            case EE_TYPE_24C65:
+//                printf("Type %2d:\n", eeType);
+//                printf("\t%s\n", EE_NAMES_24C65);
+                printf("Type %2d: %s\n", eeType, EE_NAMES_24C65);
+                break;
+            case EE_TYPE_24C16:
+//                printf("Type %2d:\n", eeType);
+//                printf("\t%s\n", EE_NAMES_24C16);
+                printf("Type %2d: %s\n", eeType, EE_NAMES_24C16);
+                break;
+            default:
+                break;
+        }
+    }
+    return( retVal );
+}
+
+
+
+int check4EEPROM( i2cEEPROM *pDevice, struct _caller_options *pParam )
+{
+    int retVal = 0;
+
+    if( pDevice != NULL && pParam != (struct _caller_options*) NULL )
+    {
+        if( (pParam->eeOptFlags & (OPTION_ADDR_SET|OPTION_BUS_SET)) ==
+                (OPTION_ADDR_SET|OPTION_BUS_SET) )
+        {
+            if( pDevice->eeOpen( pParam->eeBusNoOpt, 
+                                 pParam->eeSlaveAddrOpt ) == E_EE_SUCCESS )
+            {
+// if( (pParam->eeOptFlags & OPTION_TYPE_SET) == OPTION_TYPE_SET )
+// if( (pParam->eeOptFlags & OPTION_MAGIC_SET) == OPTION_MAGIC_SET )
+                    // pParam->eeTypeOpt
+                    // pParam->eeMagicOpt
+                    // pParam->eeSlaveAddrOpt
+                    // pParam->eeBusNoOpt
+                    // pParam->eeListOpt
+                    // pParam->eeInfoOpt
+                    // pParam->eeForceOpt
+                    // pParam->eeVerboseOpt
+                    // pParam->eeCheckOopt
+
+                fprintf(stderr, "close device\n");
+                pDevice->eeClose();
+            }
+        }
+    }
+    else
+    {
+        retVal = ERROR_NULL;
+    }
+    return( retVal );
+}
+
+
+int infoOnEEPROM( i2cEEPROM *pDevice, struct _caller_options *pParam )
+{
+    int retVal = 0;
+
+    if( pDevice != NULL && pParam != (struct _caller_options*) NULL )
+    {
+        if( (pParam->eeOptFlags & (OPTION_ADDR_SET|OPTION_BUS_SET)) ==
+                (OPTION_ADDR_SET|OPTION_BUS_SET) )
+        {
+            if( pDevice->eeOpen( pParam->eeBusNoOpt, 
+                                 pParam->eeSlaveAddrOpt ) == E_EE_SUCCESS )
+            {
+                fprintf(stderr, "close device\n");
+                pDevice->eeClose();
+            }
+        }
+    }
+    else
+    {
+        retVal = ERROR_NULL;
+    }
+    return( retVal );
+}
+
+
+int initializeEEPROM( i2cEEPROM *pDevice, struct _caller_options *pParam )
+{
+    int retVal = 0;
+
+    if( pDevice != NULL && pParam != (struct _caller_options*) NULL )
+    {
+        if( (pParam->eeOptFlags & (OPTION_ADDR_SET|OPTION_BUS_SET)) ==
+                (OPTION_ADDR_SET|OPTION_BUS_SET) )
+        {
+            if( (pParam->eeOptFlags & (OPTION_TYPE_SET|OPTION_MAGIC_SET)) == 
+                    (OPTION_TYPE_SET|OPTION_MAGIC_SET) )
+            {
+                if( pDevice->eeOpen( pParam->eeBusNoOpt, 
+                                 pParam->eeSlaveAddrOpt ) == E_EE_SUCCESS )
+                {
+                    // pParam->eeTypeOpt
+                    // pParam->eeMagicOpt
+                    // pParam->eeSlaveAddrOpt
+                    // pParam->eeBusNoOpt
+                    // pParam->eeListOpt
+                    // pParam->eeInfoOpt
+                    // pParam->eeForceOpt
+                    // pParam->eeVerboseOpt
+                    // pParam->eeCheckOopt
+                    // fprintf(stderr, "close device\n");
+                    pDevice->eeClose();
+                }
+            }
+        }
+    }
+    else
+    {
+        retVal = ERROR_NULL;
+    }
+    return( retVal );
+}
+
+/* -------------------------------------------------------------------------
+ | int main( int argc, char *argv[] )
+ |
+ | ...
+ ---------------------------------------------------------------------------
+*/
+int main( int argc, char *argv[] )
+{
+    struct _caller_options param;
+    i2cEEPROM *pDevice;
+    int retVal;
+
+    get_arguments( argc, argv, &param );
+
+    if( (pDevice = new i2cEEPROM()) != NULL )
+    {
+        if( (param.eeOptFlags & OPTION_LIST_SET) == OPTION_LIST_SET )
+        {
+            retVal = listKnownTypes( pDevice, &param );
+        }
+        else
+        {
+            if( (param.eeOptFlags & OPTION_CHECK_SET) == OPTION_CHECK_SET )
+            {
+                retVal = check4EEPROM( pDevice, &param );
+            }
+            else
+            {
+                if( (param.eeOptFlags & OPTION_INFO_SET) == OPTION_INFO_SET )
+                {
+                    retVal = infoOnEEPROM( pDevice, &param );
+                }
+                else
+                {
+                    retVal = initializeEEPROM( pDevice, &param );
+                }
+            }
+        }
+        delete pDevice;
+    }
+    else
+    {
+        retVal = ERROR_NULL;
+    }
+    return(retVal);
 }
 
 
