@@ -3,7 +3,7 @@
  *
  *  i2cCore.cpp - part of eeprom access project
  *
- *  Copyright (C) 2019 Dreamshader (aka Dirk Schanz)
+ *  Copyright (C) 2013-2019 Dreamshader (aka Dirk Schanz)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -75,6 +75,30 @@ bool isBigEndian()
 
 /*
  ***************************************************************************
+ * uint16_t makeMagic( void )
+ * ----------------------------------------------------
+ * calclate magic
+ * ----------------------------------------------------
+ * 
+ * ----------------------------------------------------
+ * 
+ ***************************************************************************
+*/
+uint16_t makeMagic( void )
+{
+    uint16_t retVal;
+
+
+    retVal = I2C_EE_MAGIC;
+ 
+
+fprintf(stderr, "makeMagic: %4x\n", retVal );
+
+    return( retVal );
+}
+
+/*
+ ***************************************************************************
  * bool isIdValid( uint16_t eeMagic )
  * ----------------------------------------------------
  * detect whether Id is valid magic
@@ -86,7 +110,7 @@ bool isBigEndian()
 */
 bool isIdValid( uint16_t eeMagic )
 {
-    return( eeMagic == I2C_EE_MAGIC );
+    return( eeMagic == makeMagic() );
 }
 
 /*
@@ -114,6 +138,7 @@ void getWordFromBuffer( uint8_t* pBuf, uint16_t* pWord )
         }
     }
 }
+
 
 /*
  ***************************************************************************
@@ -176,160 +201,6 @@ i2cConnection::~i2cConnection()
     i2cClose();
 }
 
-/*
- ***************************************************************************
- * int i2cConnection::i2cProbe( int busNo, int addr, uint16_t magic, 
- *                              uint16_t type )
- * ----------------------------------------------------
- * Probe for the slave device with address addr on bus bus
- * ----------------------------------------------------
- * int bus    : bus to use
- * int addr   : slave addr to connect to
- * ----------------------------------------------------
- * returns an errorcode, E_I2C_SUCCESS on success
- ***************************************************************************
-*/
-int i2cConnection::i2cProbe( int bus, int addr, uint16_t magic, 
-                             uint16_t type )
-{
-    char devName[I2C_MAX_DEVNAME_LEN];
-    int devFd;
-    int retVal = E_I2C_SUCCESS;
-    uint8_t i2cId[I2C_MAX_BLOCK_LEN];
-    uint8_t i2cCheckBuf[I2C_EEPROM_ID_LEN];
-
-    uint16_t eeMagic;
-    uint16_t eeType;
-
-// fprintf(stderr, "probe for slave %02x on bus %d\n", addr, bus );
-
-    sprintf(devName, "/dev/i2c-%d", bus);
-    devFd = open(devName, O_RDWR);
-
-    if( devFd > 0 )
-    {
-	// get funcs list
-	if((retVal = ioctl(devFd, I2C_FUNCS, &i2c_funcs) < 0))
-	{
-perror("i2cProbe ioctl i2c funcs!");
-            i2c_lastErrno = errno;
-            retVal = E_I2C_IOCTL;
-	}
-        else
-        {
-            if( (retVal = ioctl(devFd, I2C_SLAVE, addr)) < 0) 
-            {
- perror("i2cProbe ioctl slave addr");
-                i2c_lastErrno = errno;
-                retVal = E_I2C_IOCTL;
-            }
-            else
-            {
-                __s32 res;
-                res = i2c_smbus_read_i2c_block_data( devFd, 0x00, 
-                                                     I2C_MAX_BLOCK_LEN, i2cId );
-                if( res < 0 )
-                {
-// perror("i2c_smbus_read_i2c_block_data");
-                    i2c_lastErrno = retVal = E_I2C_FAIL;
-                }
-                else
-                {
-                    if( magic == I2C_EE_NO_MAGIC )
-                    {
-                        retVal = type;
-                    }
-                    else
-                    {
-                        if( res == I2C_MAX_BLOCK_LEN )
-                        {
-#ifdef TALK_2_ME
-                            for(int i = 0; i < res; i++ )
-                            {
-                                fprintf(stderr, "initial read byte %d = %02x\n", 
-                                                 i, i2cId[i]);
-                            }
-#endif // TALK_2_ME
-
-                            getWordFromBuffer( &i2cId[0], &eeMagic );
-                            getWordFromBuffer( &i2cId[2], &eeType );
-// fprintf(stderr, "Initial read returns %u as magic and %u as type\n", eeMagic, eeType);
-
-                            if( isIdValid( eeMagic ) )
-                            {
-                                int rc;
-                                int i;
-                                for( rc = 0, i = 0; rc > 0 && 
-                                                    i < I2C_EEPROM_ID_LEN; i++ )
-                                {
-                                    if( (rc = write( devFd, (char*) &i, 1 )) > 0 )
-                                    {
-                                        rc = read( devFd, &i2cCheckBuf[i], 1 );
-                                    }
-                                }
-
-#ifdef TALK_2_ME
-                                for( i = 0; i < I2C_EEPROM_ID_LEN; i++ )
-                                {
-fprintf(stderr, "CheckBuffer pos %d is %02x\n", i, i2cCheckBuf[i] );
-                                }
-#endif // TALK_2_ME
-
-                                if( memcmp( i2cId, i2cCheckBuf, 
-                                            I2C_EEPROM_ID_LEN ) != 0 )
-                                {
-// fprintf(stderr, " CheckBuffer does not match block buffer. Assuming 16 bit adressing\n");
-                                    i2c_16bit_addressing = true;
-                                    i2c_lastErrno = E_I2C_SUCCESS;
-                                }
-                                else
-                                {
-                                    i2c_16bit_addressing = false;
-                                    i2c_lastErrno = E_I2C_SUCCESS;
-                                }
-    
-                                retVal = (int) eeType;
-                            }
-                            else
-                            {
-                                i2c_lastErrno = retVal = E_I2C_MAGIC_FAIL;
-                            }
-                        }
-                        else
-                        {
-                            i2c_lastErrno = retVal = E_I2C_FAIL;
-                        }
-                    }
-                }
-            }
-        }
-        close( devFd );
-    }
-    else
-    {
-        i2c_lastErrno = errno;
-        retVal = E_I2C_NODEV;
-    }
-
-    return( retVal );
-}
-
-/*
- ***************************************************************************
- * int i2cConnection::i2cProbe( int bus, int addr )
- * ----------------------------------------------------
- * Probe for the slave device with address addr on bus bus
- * ----------------------------------------------------
- * int bus    : bus to use
- * int addr   : slave addr to connect to
- * ----------------------------------------------------
- * returns an errorcode, E_I2C_SUCCESS on success
- ***************************************************************************
-*/
-int i2cConnection::i2cProbe( int busNo, int slaveAddr )
-{
-    return( i2cProbe( busNo, slaveAddr, I2C_EE_MAGIC, -1 ));
-}
 
 /*
  ***************************************************************************
@@ -360,23 +231,32 @@ int i2cConnection::i2cOpen(int bus, int addr, bool force, int flags)
     {
         sprintf(devName, "/dev/i2c-%d", bus);
         devFd = open(devName, flags);
-
+fprintf(stderr, "Using device %s\n", devName);
         if( devFd > 0 )
         {
-            if (ioctl(devFd, force ? I2C_SLAVE_FORCE : I2C_SLAVE, addr) < 0) 
-            {
+	    if((retVal = ioctl(devFd, I2C_FUNCS, &i2c_funcs) < 0))
+	    {
+perror("i2cOpen ioctl i2c funcs!");
                 i2c_lastErrno = errno;
                 retVal = E_I2C_IOCTL;
-            }
+	    }
             else
             {
-                i2c_devfd = devFd;
-                i2c_bus   = bus;
-                i2c_addr  = addr;
-                i2c_force = force;
-                i2c_flags = flags;
+                if(ioctl(devFd, force ? I2C_SLAVE_FORCE : I2C_SLAVE, addr) < 0) 
+                {
+                    i2c_lastErrno = errno;
+                    retVal = E_I2C_IOCTL;
+                }
+                else
+                {
+                    i2c_devfd = devFd;
+                    i2c_bus   = bus;
+                    i2c_addr  = addr;
+                    i2c_force = force;
+                    i2c_flags = flags;
     
-                i2c_lastErrno = retVal = E_I2C_SUCCESS;
+                    i2c_lastErrno = retVal = E_I2C_SUCCESS;
+                }
             }
         }
         else
@@ -483,6 +363,283 @@ int i2cConnection::i2cClose( void )
 
 /*
  ***************************************************************************
+ * int i2cConnection::setAddrPointer( int fd, uint16_t addr )
+ * ----------------------------------------------------
+ * write address byte(s) to bus related to fd
+ * ----------------------------------------------------
+ * 
+ * ----------------------------------------------------
+ * returns an errorcode, E_I2C_SUCCESS on success
+ ***************************************************************************
+*/
+int i2cConnection::setAddrPointer( int fd, uint16_t addr )
+{
+//    __s32 res;
+    int retVal;
+    uint8_t dataBuf[8];
+    int bytes2Write;
+    dataBuf[0] = (addr >> 8) & 0x00ff;
+    dataBuf[1] = addr & 0x00ff;
+
+    if( addr != I2C_CURRENT_ADDRESS )
+    {
+        if( i2c_16bit_addressing )
+        {
+// 16 bit adressing
+            bytes2Write = 2;
+            retVal = write( fd, dataBuf, bytes2Write);
+        }
+        else
+        {
+// 8 bit adressing
+            bytes2Write = 1;
+            retVal = write( fd, dataBuf, bytes2Write);
+        }
+
+        if( retVal != bytes2Write )
+        {
+perror("setAddrPointer");
+            i2c_lastErrno = retVal = E_I2C_FAIL;
+        }
+        else
+        {
+            i2c_lastErrno = retVal = E_I2C_SUCCESS;
+        }
+    }
+    else
+    {
+        i2c_lastErrno = retVal = E_I2C_SUCCESS;
+    }
+
+    return( retVal );
+}
+
+/*
+ ***************************************************************************
+ * int i2cConnection::initID( void )
+ * ----------------------------------------------------
+ * write current magic and eeprom Id
+ * ----------------------------------------------------
+ * 
+ * ----------------------------------------------------
+ * returns an errorcode, E_I2C_SUCCESS on success
+ ***************************************************************************
+*/
+int i2cConnection::initID( uint16_t eeMagic, uint16_t eeType )
+{
+    int retVal;
+    char wrBuffer[I2C_EEPROM_ID_LEN];
+
+    memcpy(&wrBuffer[0], &eeMagic, 2);
+    memcpy(&wrBuffer[2], &eeType, 2);
+
+    if( byte_order_big_endian )
+    {
+        retVal = writeByte(0, wrBuffer[0] );
+        if( retVal < 0 )
+        {
+            perror("writeByte pos 0");
+        }
+        else
+        {
+            retVal = writeByte(1, wrBuffer[1] );
+            if( retVal < 0 )
+            {
+                perror("writeByte pos 1");
+            }
+            else
+            {
+                retVal = writeByte(2, wrBuffer[2] );
+                if( retVal < 0 )
+                {
+                    perror("writeByte pos 2");
+                }
+                else
+                {
+                    retVal = writeByte(3, wrBuffer[3] );
+                    if( retVal < 0 )
+                    {
+                        perror("writeByte pos 3");
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        retVal = writeByte(0, wrBuffer[1] );
+        if( retVal < 0 )
+        {
+            perror("writeByte pos 0");
+        }
+        else
+        {
+            retVal = writeByte(1, wrBuffer[0] );
+            if( retVal < 0 )
+            {
+                perror("writeByte pos 1");
+            }
+            else
+            {
+                retVal = writeByte(2, wrBuffer[3] );
+                if( retVal < 0 )
+                {
+                    perror("writeByte pos 2");
+                }
+                else
+                {
+                    retVal = writeByte(3, wrBuffer[2] );
+                    if( retVal < 0 )
+                    {
+                        perror("writeByte pos 3");
+                    }
+                }
+            }
+        }
+    }
+    return( retVal );
+}
+
+
+/*
+ ***************************************************************************
+ * int i2cConnection::readByte( uint16_t addr, void* pData )
+ * ----------------------------------------------------
+ * read a byte value from opened stream at address addr 
+ * into storage pointed by pData
+ * ----------------------------------------------------
+ * 
+ * ----------------------------------------------------
+ * returns an errorcode, E_I2C_SUCCESS on success
+ ***************************************************************************
+*/
+int i2cConnection::readByte( uint16_t addr, void* pData )
+{
+    return( readByte(i2c_devfd, addr, pData) );
+}
+
+/*
+ ***************************************************************************
+ * int i2cConnection::setAddrPointer( int fd, uint16_t addr )
+ * ----------------------------------------------------
+ * read a byte value from stream fd at address addr 
+ * into storage pointed by pData
+ * ----------------------------------------------------
+ * 
+ * ----------------------------------------------------
+ * returns an errorcode, E_I2C_SUCCESS on success
+ ***************************************************************************
+*/
+int i2cConnection::readByte( int fd, uint16_t addr, void* pData )
+{
+
+    __s32 res;
+    int retVal;
+    char* pDataOut;
+    uint8_t rdByte;
+
+    if( (pDataOut = (char*) pData) != NULL )
+    {
+        if( (retVal = setAddrPointer( fd, addr )) == E_I2C_SUCCESS )
+        {
+
+            res = read(fd, &rdByte, 1);
+            if (res < 0)
+            {
+perror("readByte: read failed!");
+                i2c_lastErrno = retVal = E_I2C_FAIL;
+            } 
+            else 
+            {
+                /* res contains the read byte */
+
+//                *pDataOut = res & 0xff;
+                *pDataOut = rdByte;
+                i2c_lastErrno = retVal = E_I2C_SUCCESS;
+            }
+        }
+    }
+    else
+    {
+        i2c_lastErrno = retVal = E_I2C_DATA_NULLP;
+    }
+
+    return( retVal );
+}
+
+/*
+ ***************************************************************************
+ * int i2cConnection::writeByte( char addr, char data )
+ * ----------------------------------------------------
+ * write the byte data to address addr of current stream
+ * ----------------------------------------------------
+ * 
+ * ----------------------------------------------------
+ * returns an errorcode, E_I2C_SUCCESS on success
+ ***************************************************************************
+*/
+int i2cConnection::writeByte( uint16_t addr, uint8_t data )
+{
+    return( writeByte(i2c_devfd, addr, data) );
+}
+
+/*
+ ***************************************************************************
+ * int i2cConnection::writeByte( int fd, uint16_t addr, char data )
+ * ----------------------------------------------------
+ * write the byte data to address addr of stream fd
+ * into storage pointed by pData
+ * ----------------------------------------------------
+ * 
+ * ----------------------------------------------------
+ * returns an errorcode, E_I2C_SUCCESS on success
+ ***************************************************************************
+*/
+int i2cConnection::writeByte( int fd, uint16_t addr, uint8_t data )
+{
+
+    int retVal;
+    int bytes2Write;
+    uint8_t dataBuf[8];
+
+    dataBuf[0] = (addr >> 8) & 0x00ff;
+    dataBuf[1] = addr & 0x00ff;
+    dataBuf[2] = data;
+
+    if( i2c_16bit_addressing )
+    {
+        // 16 bit adressing
+        bytes2Write = 3;
+        retVal = write( fd, dataBuf, bytes2Write);
+    }
+    else
+    {
+        // 8 bit adressing
+        bytes2Write = 2;
+        retVal = write( fd, &dataBuf[1], bytes2Write);
+    }
+
+    if(retVal != bytes2Write)
+    {
+perror("writeByte failed!");
+        i2c_lastErrno = retVal = E_I2C_FAIL;
+    } 
+    else 
+    {
+// fprintf(stderr, "wrote %d bytes of %d.\n", retVal, bytes2Write);
+        i2c_lastErrno = retVal = E_I2C_SUCCESS;
+        if(i2c_write_cycle_time > 0 )
+        {
+// fprintf(stderr, "write cycle time = %d\n", i2c_write_cycle_time );
+            usleep(i2c_write_cycle_time * 1000);
+        }
+    }
+
+    return( retVal );
+}
+
+/*
+ ***************************************************************************
  * int i2cConnection::readWord( uint16_t addr, void* pData )
  * ----------------------------------------------------
  * read a word value from opened stream at address addr 
@@ -550,107 +707,86 @@ int i2cConnection::readWord( int fd, uint16_t addr, void* pData )
 
 /*
  ***************************************************************************
- * int i2cConnection::setAddrPointer( int fd, uint16_t addr )
+ * int i2cConnection::writeWord( uint16_t addr, uint16_t data )
  * ----------------------------------------------------
- * write address byte(s) to bus related to fd
+ * write word value data to opened stream at address addr 
  * ----------------------------------------------------
  * 
  * ----------------------------------------------------
  * returns an errorcode, E_I2C_SUCCESS on success
  ***************************************************************************
 */
-int i2cConnection::setAddrPointer( int fd, uint16_t addr )
+int i2cConnection::writeWord( uint16_t addr, uint16_t data )
 {
-//    __s32 res;
+    return( writeWord(i2c_devfd, addr, data) );
+}
+
+/*
+ ***************************************************************************
+ * int i2cConnection::writeWord( int fd, uint16_t addr, uint16_t data )
+ * ----------------------------------------------------
+ * write the word data to address addr of stream fd
+ * ----------------------------------------------------
+ * 
+ * ----------------------------------------------------
+ * returns an errorcode, E_I2C_SUCCESS on success
+ ***************************************************************************
+*/
+int i2cConnection::writeWord( int fd, uint16_t addr, uint16_t data )
+{
     int retVal;
-    uint8_t dataBuf[8];
-    int bytes2Write;
-    dataBuf[0] = (addr >> 8) & 0x00ff;
-    dataBuf[1] = addr & 0x00ff;
 
-    if( i2c_16bit_addressing )
-    {
-// 16 bit adressing
-        bytes2Write = 2;
-        retVal = write( fd, dataBuf, bytes2Write);
-    }
-    else
-    {
-// 8 bit adressing
-        bytes2Write = 1;
-        retVal = write( fd, dataBuf, bytes2Write);
-    }
+fprintf(stderr, "%s %s %d: fd=%d, addr=%4x, data=%4x\n",
+__FUNCTION__,__FILE__,__LINE__, fd, addr, data );
 
-//    if( res < 0 )
-    if( retVal != bytes2Write )
-    {
-perror("setAddrPointer");
-        i2c_lastErrno = retVal = E_I2C_FAIL;
-    }
-    else
-    {
-        i2c_lastErrno = retVal = E_I2C_SUCCESS;
-    }
-
+    i2c_lastErrno = retVal = E_I2C_SUCCESS;
+fprintf(stderr, "write Word: %4x\n", data);
     return( retVal );
 }
 
+
 /*
  ***************************************************************************
- * int i2cConnection::readByte( uint16_t addr, void* pData )
+ * int i2cConnection::readBuf( uint16_t addr, uint8_t* pBuffer, int amount )
  * ----------------------------------------------------
- * read a byte value from opened stream at address addr 
- * into storage pointed by pData
+ * read amount number of bytes from open stream from address addr 
  * ----------------------------------------------------
  * 
  * ----------------------------------------------------
  * returns an errorcode, E_I2C_SUCCESS on success
  ***************************************************************************
 */
-int i2cConnection::readByte( uint16_t addr, void* pData )
+int i2cConnection::readBuf( uint16_t addr, uint8_t* pBuffer, int amount )
 {
-    return( readByte(i2c_devfd, addr, pData) );
+    return( readBuf( i2c_devfd, addr, pBuffer, amount ) );
 }
 
 /*
  ***************************************************************************
- * int i2cConnection::setAddrPointer( int fd, uint16_t addr )
+ * int i2cConnection::readBuf(int fd,uint16_t addr,uint8_t* pBuffer,int amount)
  * ----------------------------------------------------
- * read a byte value from stream fd at address addr 
- * into storage pointed by pData
+ * read amount number of bytes from stream fd from address addr 
  * ----------------------------------------------------
  * 
  * ----------------------------------------------------
  * returns an errorcode, E_I2C_SUCCESS on success
  ***************************************************************************
 */
-int i2cConnection::readByte( int fd, uint16_t addr, void* pData )
+int i2cConnection::readBuf( int fd, uint16_t addr, uint8_t* pBuffer, int amount )
 {
-
-    __s32 res;
     int retVal;
-    char* pDataOut;
-    char rdByte;
 
-    if( (pDataOut = (char*) pData) != NULL )
+fprintf(stderr, "%s %s %d: fd=%d, addr=%4x, pBuffer=%4x, amount=%d\n",
+__FUNCTION__,__FILE__,__LINE__, fd, addr, (unsigned int) pBuffer, amount);
+
+    if( pBuffer != (uint8_t*) NULL )
     {
-        if( (retVal = setAddrPointer( fd, addr )) == E_I2C_SUCCESS )
+        if( amount > 0 )
         {
-
-            res = read(fd, &rdByte, 1);
-            if (res < 0)
-            {
-perror("readByte: read failed!");
-                i2c_lastErrno = retVal = E_I2C_FAIL;
-            } 
-            else 
-            {
-                /* res contains the read byte */
-
-//                *pDataOut = res & 0xff;
-                *pDataOut = rdByte;
-                i2c_lastErrno = retVal = E_I2C_SUCCESS;
-            }
+        }
+        else
+        {
+            i2c_lastErrno = retVal = E_I2C_INVAL_BUFLEN;
         }
     }
     else
@@ -663,160 +799,128 @@ perror("readByte: read failed!");
 
 /*
  ***************************************************************************
- * int i2cConnection::writeByte( char addr, char data )
+ * int i2cConnection::writeBuf( uint16_t addr, uint8_t* pBuffer, int amount )
  * ----------------------------------------------------
- * write the byte data to address addr of current stream
+ * write amount number of data bytes pointed by pBuffer to 
+ * opened stream at address addr 
  * ----------------------------------------------------
  * 
  * ----------------------------------------------------
  * returns an errorcode, E_I2C_SUCCESS on success
  ***************************************************************************
 */
-int i2cConnection::writeByte( uint16_t addr, char data )
+int i2cConnection::writeBuf( uint16_t addr, uint8_t* pBuffer, int amount )
 {
-    return( writeByte(i2c_devfd, addr, data) );
+    return( writeBuf( i2c_devfd, addr, pBuffer, amount ) );
 }
 
 /*
  ***************************************************************************
- * int i2cConnection::writeByte( int fd, uint16_t addr, char data )
+ * int i2cConnection::writeBuf(int fd,uint16_t addr,uint8_t* pBuffer,int amount)
  * ----------------------------------------------------
- * write the byte data to address addr of stream fd
- * into storage pointed by pData
+ * write amount number of data bytes pointed by pBuffer to 
+ * stream fd at address addr 
  * ----------------------------------------------------
  * 
  * ----------------------------------------------------
  * returns an errorcode, E_I2C_SUCCESS on success
  ***************************************************************************
 */
-int i2cConnection::writeByte( int fd, uint16_t addr, char data )
+int i2cConnection::writeBuf( int fd, uint16_t addr, uint8_t* pBuffer, int amount )
 {
-
     int retVal;
-    int bytes2Write;
-    uint8_t dataBuf[8];
 
-    dataBuf[0] = (addr >> 8) & 0x00ff;
-    dataBuf[1] = addr & 0x00ff;
-    dataBuf[2] = data;
+fprintf(stderr, "%s %s %d: fd=%d, addr=%4x, pBuffer=%4x, amount=%d\n",
+__FUNCTION__,__FILE__,__LINE__, fd, addr, (unsigned int) pBuffer, amount);
 
-    if( i2c_16bit_addressing )
+    if( pBuffer != (uint8_t*) NULL )
     {
-        // 16 bit adressing
-        bytes2Write = 3;
-        retVal = write( fd, dataBuf, bytes2Write);
+        if( amount > 0 )
+        {
+        }
+        else
+        {
+            i2c_lastErrno = retVal = E_I2C_INVAL_BUFLEN;
+        }
     }
     else
     {
-        // 8 bit adressing
-        bytes2Write = 2;
-        retVal = write( fd, &dataBuf[1], bytes2Write);
+        i2c_lastErrno = retVal = E_I2C_DATA_NULLP;
     }
 
-    if(retVal != bytes2Write)
+    return( retVal );
+}
+
+/*
+ ***************************************************************************
+ * int i2cConnection::check4Magic( uint16_t* pMagic, uint16_t* pType )
+ * ----------------------------------------------------
+ * check for existing magic, EEPROM type and detect
+ * ----------------------------------------------------
+ * 
+ * ----------------------------------------------------
+ * returns an errorcode, E_I2C_SUCCESS on success
+ * the values pointed by pMagic and pType will contain the
+ * detected magic and EEPROM type in case of success
+ ***************************************************************************
+*/
+int i2cConnection::check4Magic( uint16_t* pMagic, uint16_t* pType )
+{
+    int retVal = E_I2C_SUCCESS;
+    uint8_t i2cId[I2C_MAX_BLOCK_LEN];
+
+    uint16_t eeMagic;
+    uint16_t eeType;
+
+    __s32 res;
+    res = i2c_smbus_read_i2c_block_data( i2c_devfd, 0x00, 
+                                         I2C_MAX_BLOCK_LEN, i2cId );
+
+    if( res < 0 )
     {
-perror("writeByte failed!");
+perror("i2c_smbus_read_i2c_block_data");
         i2c_lastErrno = retVal = E_I2C_FAIL;
-    } 
-    else 
-    {
-// fprintf(stderr, "wrote %d bytes of %d.\n", retVal, bytes2Write);
-        i2c_lastErrno = retVal = E_I2C_SUCCESS;
-        if(i2c_write_cycle_time > 0 )
-        {
-// fprintf(stderr, "write cycle time = %d\n", i2c_write_cycle_time );
-            usleep(i2c_write_cycle_time * 1000);
-        }
-
-    }
-
-    return( retVal );
-}
-
-/*
- ***************************************************************************
- * int i2cConnection::initID( void )
- * ----------------------------------------------------
- * write current magic and eeprom Id
- * ----------------------------------------------------
- * 
- * ----------------------------------------------------
- * returns an errorcode, E_I2C_SUCCESS on success
- ***************************************************************************
-*/
-int i2cConnection::initID( uint16_t eeMagic, uint16_t eeType )
-{
-    int retVal;
-    char wrBuffer[I2C_EEPROM_ID_LEN];
-
-    memcpy(&wrBuffer[0], &eeMagic, 2);
-    memcpy(&wrBuffer[2], &eeType, 2);
-
-    if( byte_order_big_endian )
-    {
-        retVal = writeByte(0, wrBuffer[0] );
-        if( retVal < 0 )
-        {
-            perror("writeByte");
-        }
-        else
-        {
-            retVal = writeByte(1, wrBuffer[1] );
-            if( retVal < 0 )
-            {
-                perror("writeByte");
-            }
-            else
-            {
-                retVal = writeByte(2, wrBuffer[2] );
-                if( retVal < 0 )
-                {
-                    perror("writeByte");
-                }
-                else
-                {
-                    retVal = writeByte(3, wrBuffer[3] );
-                    if( retVal < 0 )
-                    {
-                        perror("writeByte");
-                    }
-                }
-            }
-        }
     }
     else
     {
-        retVal = writeByte(0, wrBuffer[1] );
-        if( retVal < 0 )
+        if( res == I2C_MAX_BLOCK_LEN )
         {
-            perror("writeByte");
-        }
-        else
-        {
-            retVal = writeByte(1, wrBuffer[0] );
-            if( retVal < 0 )
+#ifdef TALK_2_ME
+            for(int i = 0; i < res; i++ )
             {
-                perror("writeByte");
+                fprintf(stderr, "initial read byte %d = %02x\n", i, i2cId[i]);
             }
-            else
+#endif // TALK_2_ME
+
+            getWordFromBuffer( &i2cId[0], &eeMagic );
+            getWordFromBuffer( &i2cId[2], &eeType );
+fprintf(stderr, "Initial read returns %x as magic and %u as type\n", eeMagic, eeType);
+
+            if( isIdValid( eeMagic ) )
             {
-                retVal = writeByte(2, wrBuffer[3] );
-                if( retVal < 0 )
+                if( pMagic == NULL || pType == NULL )
                 {
-                    perror("writeByte");
+                    i2c_lastErrno = retVal = E_I2C_DATA_NULLP;
                 }
                 else
                 {
-                    retVal = writeByte(3, wrBuffer[2] );
-                    if( retVal < 0 )
-                    {
-                        perror("writeByte");
-                    }
+                    *pMagic = eeMagic;
+                    *pType = eeType;
+                    i2c_lastErrno = retVal = E_I2C_SUCCESS;
                 }
             }
+            else
+            {
+                i2c_lastErrno = retVal = E_I2C_MAGIC_FAIL;
+            }
+        }
+        else
+        {
+perror("i2c_smbus_read_i2c_block_data");
+            i2c_lastErrno = retVal = E_I2C_FAIL;
         }
     }
+
     return( retVal );
 }
-
 

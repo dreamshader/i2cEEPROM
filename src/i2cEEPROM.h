@@ -3,7 +3,7 @@
  *
  *  i2cEEPROM.h - part of eeprom access project
  *
- *  Copyright (C) 2019 Dreamshader (Dirk Schanz)
+ *  Copyright (C) 2013-2019 Dreamshader (Dirk Schanz)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -41,24 +41,43 @@ extern "C" {
 #endif
 
 
-#define E_EE_SUCCESS         0
-#define E_EE_FAIL           -1
-#define E_EE_NULL           -3
-#define E_EE_MEM            -4
-#define E_EE_SUPP           -5
-#define E_EE_NODEV          -6
-#define E_EE_IOCTL          -7
-#define E_EE_VERIFY         -8
+#define E_EE_SUCCESS                0
+#define E_EE_FAIL                  -1
+#define E_EE_NULL                  -3
+#define E_EE_MEM                   -4
+#define E_EE_SUPP                  -5
+#define E_EE_NODEV                 -6
+#define E_EE_IOCTL                 -7
+#define E_EE_VERIFY                -8
+#define E_EE_INVAL_TYPE            -9
+#define E_EE_NO_CONNECTION        -10
+#define E_EE_DATA_NULLP           -11
 
-#define EE_PRIVATE_HDR_LEN   4
+#define EE_PRIVATE_HDR_LEN          4
 
 #define EE_TYPE_24AA65              1
 #define EE_NAMES_24AA65             "24AA65"
+#define ADRESSING_16_BIT_24AA65     true
+#define WRITE_CYCLE_TIME_24AA65     5
+#define BUS_FREQUENCY_1V8_24AA65  100
+#define BUS_FREQUENCY_4V5_24AA65  400
+#define PAGE_SIZE_24AA65            8
+#define TOTAL_PAGES_24AA65        (8 * 1024)
+#define BLOCK_SIZE_24AA65         I2C_MAX_BLOCK_LEN
+
 #define EE_TYPE_24LC65              2
 #define EE_NAMES_24LC65             "24LC65"
+#define ADRESSING_16_BIT_24LC65     true
+#define WRITE_CYCLE_TIME_24LC65     5
+#define BUS_FREQUENCY_1V8_24LC65  100
+#define BUS_FREQUENCY_4V5_24LC65  400
+#define PAGE_SIZE_24LC65            8
+#define TOTAL_PAGES_24LC65        (8 * 1024)
+#define BLOCK_SIZE_24LC65         I2C_MAX_BLOCK_LEN
 
 #define EE_TYPE_24C65               3
 #define EE_NAMES_24C65              "24C65"
+#define ADRESSING_16_BIT_24C65      true
 #define WRITE_CYCLE_TIME_24C65      5
 #define BUS_FREQUENCY_1V8_24C65   100
 #define BUS_FREQUENCY_4V5_24C65   400
@@ -68,6 +87,7 @@ extern "C" {
 
 #define EE_TYPE_24C16               4
 #define EE_NAMES_24C16              "24C16"
+#define ADRESSING_16_BIT_24C16      true
 #define WRITE_CYCLE_TIME_24C16      5
 #define BUS_FREQUENCY_1V8_24C16   100
 #define BUS_FREQUENCY_4V5_24C16   400
@@ -89,23 +109,31 @@ class i2cEEPROM {
         int byte_offset;
 
     public:
-        unsigned int ee_page_size;
-        unsigned int ee_total_pages;
-        unsigned int ee_block_size;
+        uint16_t ee_type;
+        uint16_t ee_page_size;
+        uint16_t ee_total_pages;
+        uint16_t ee_block_size;
 
         i2cEEPROM();
         ~i2cEEPROM();
 
-        int eeInit( int busNo, int slaveAddr, uint16_t magic, 
-                    uint16_t type, bool initialize );
-        int eeInit( int busNo, int minSlaveAddr, int maxSlaveAddr );
-
         int eeOpen( int busNo, int slaveAddr );
+
+        int eeTypeSet( uint16_t type );
+        int eeInit( void );
+
+        int eeTypeDetect( uint16_t* pMagic, uint16_t* pType );
+        void eeInfo( void );
 
         void eeClose( void );
 
-        int eeRead( unsigned char* pBuffer, int amount );
-        int eeWrite( unsigned char* pBuffer, int amount, uint16_t addr );
+        int eeReadByte( uint16_t addr, uint8_t* pByteValue );
+        int eeReadWord( uint16_t addr, uint16_t* pWordValue );
+        int eeRead( uint16_t addr, uint8_t* pBuffer, int amount );
+
+        int eeWriteByte( uint16_t addr, uint8_t byteValue );
+        int eeWriteWord( uint16_t addr, uint16_t wordValue );
+        int eeWrite( uint16_t addr, uint8_t* pBuffer, int amount );
 };
 
 

@@ -3,7 +3,7 @@
  *
  *  i2cCore.h - part of eeprom access project
  *
- *  Copyright (C) 2019 Dreamshader (aka Dirk Schanz)
+ *  Copyright (C) 2013-2019 Dreamshader (aka Dirk Schanz)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -62,6 +62,7 @@ extern "C" {
 #define E_I2C_MAGIC_FAIL           -16
 #define E_I2C_EE_INVAL_ID          -17
 #define E_I2C_EE_NOTSUPPORTED      -18
+#define E_I2C_INVAL_BUFLEN         -19
 
 
 #define I2C_MAX_DEVNAME_LEN         30
@@ -73,55 +74,82 @@ extern "C" {
 #define I2C_8BIT_ADDRESS             8
 #define I2C_MAX_BLOCK_LEN           32
 
-#define I2C_EE_MAGIC            0xf4e1
+// #define I2C_EE_MAGIC            0xf4e1
 #define I2C_EE_NO_MAGIC         0xffff
 
+#define I2C_CURRENT_ADDRESS        0xffff
+
+#define I2C_PROTOCOL_VERSION    0b00010000
+#define I2C_PROTOCOL_RELEASE    0b00000001
+#define I2C_LIBRARY_VERSION     0b00010000
+#define I2C_LIBRARY_RELEASE     0b00000001
+
+#define I2C_EE_MAGIC   ((I2C_PROTOCOL_VERSION|I2C_PROTOCOL_RELEASE)<< 8) |\
+                        (I2C_LIBRARY_VERSION|I2C_LIBRARY_RELEASE)
+
 #define I2C_EEPROM_ID_LEN           4
+
+
+bool isBigEndian();
+uint16_t makeMagic( void );
+bool isIdValid( uint16_t eeMagic );
+void getWordFromBuffer( uint8_t* pBuf, uint16_t* pWord );
+
 
 class i2cConnection {
 
     public:
         bool i2c_16bit_addressing;
-        int i2c_write_cycle_time = 5;
-        int i2c_bus_frequency_1V8 = 100;
-        int i2c_bus_frequency_4V5 = 400;
-        int i2c_page_size;
+        int  i2c_write_cycle_time;
+        int  i2c_bus_frequency_1V8;
+        int  i2c_bus_frequency_4V5;
+
         unsigned long i2c_funcs;
+
         bool byte_order_big_endian;
 
-        int i2c_devfd;
-        int i2c_bus;
-        int i2c_addr;
+        int  i2c_devfd;
+        int  i2c_bus;
+        int  i2c_addr;
         bool i2c_force;
-        int i2c_flags;
-        int i2c_lastErrno;
+        int  i2c_flags;
+        int  i2c_lastErrno;
 
-        i2cConnection( void );
+// -------------------
+
         i2cConnection( int bus, int addr, bool force, int flags );
+        i2cConnection( void );
 
         ~i2cConnection();
-
-        int i2cProbe( int busNo, int addr, uint16_t magic, uint16_t type );
-        int i2cProbe( int bus, int addr );
 
         int i2cOpen( int bus, int addr, bool force, int flags );
         int i2cOpen( void );
 
-        int i2cClose( void );
+        int check4Magic(  uint16_t* pMagic, uint16_t* pType  );
 
         int setAddrPointer( int fd, uint16_t addr );
+
+        int initID( uint16_t eeMagic, uint16_t eeType  );
 
         int readWord( int fd, uint16_t addr, void* pData );
         int readWord( uint16_t addr, void* pData );
 
+        int writeWord( int fd, uint16_t addr, uint16_t data );
+        int writeWord( uint16_t addr, uint16_t data );
+
         int readByte( int fd, uint16_t addr, void* pData );
         int readByte( uint16_t addr, void* pData );
 
-        int writeByte( int fd, uint16_t addr, char data );
-        int writeByte( uint16_t addr, char data );
+        int writeByte( int fd, uint16_t addr, uint8_t data );
+        int writeByte( uint16_t addr, uint8_t data );
 
-        int initID( uint16_t eeMagic, uint16_t eeType  );
+        int readBuf( int fd, uint16_t addr, uint8_t* pBuffer, int amount );
+        int readBuf( uint16_t addr, uint8_t* pBuffer, int amount );
 
+        int writeBuf( int fd, uint16_t addr, uint8_t* pBuffer, int amount );
+        int writeBuf( uint16_t addr, uint8_t* pBuffer, int amount );
+
+        int i2cClose( void );
 
 };
 

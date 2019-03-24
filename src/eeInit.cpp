@@ -3,7 +3,7 @@
  *
  *  eeInit.cpp - part of eeprom access project
  *
- *  Copyright (C) 2019 Dreamshader (Dirk Schanz)
+ *  Copyright (C) 2013-2019 Dreamshader (Dirk Schanz)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -74,7 +74,6 @@
  *   Show options and exit
  *
  ***********************************************************************
-
  */
 
 #include <stdio.h>
@@ -88,6 +87,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "i2cEEPROM.h"
 #include "i2cEEPROM.h"
 
 #define OPTION_TYPE_SET     0x0001
@@ -104,7 +104,7 @@ struct _caller_options {
     uint16_t eeTypeOpt;
     uint16_t eeMagicOpt;
     uint16_t eeSlaveAddrOpt;
-    uint8_t  eeBusNoOpt;
+    uint16_t eeBusNoOpt;
     uint16_t eeOptFlags;
     bool     eeListOpt;
     bool     eeInfoOpt;
@@ -137,7 +137,7 @@ void dumpArgs( struct _caller_options *pParam )
     {
         fprintf(stderr, "Type .......: %d\n",   pParam->eeTypeOpt );
         fprintf(stderr, "Magic ......: %04x\n", pParam->eeMagicOpt );
-        fprintf(stderr, "Slave addr. : %02x\n", pParam->eeSlaveAddrOpt );
+        fprintf(stderr, "Slave addr. : %04x\n", pParam->eeSlaveAddrOpt );
         fprintf(stderr, "Bus No. ....: %d\n",   pParam->eeBusNoOpt );
         fprintf(stderr, "Flags ......: %04x\n", pParam->eeOptFlags);
         fprintf(stderr, "List .......: %s\n", 
@@ -161,12 +161,17 @@ void dumpArgs( struct _caller_options *pParam )
  | reset options to defaults
  ---------------------------------------------------------------------------
 */
+
 void resetArgs( struct _caller_options *pParam )
 {
     if( pParam != NULL )
     {
         pParam->eeTypeOpt      = 0xffff;
         pParam->eeMagicOpt     = 0xffff;
+
+        pParam->eeMagicOpt = makeMagic();
+        pParam->eeOptFlags = OPTION_MAGIC_SET;
+
         pParam->eeSlaveAddrOpt = 0xffff;
         pParam->eeBusNoOpt     = 0xff;
         pParam->eeOptFlags     = 0;
@@ -191,6 +196,7 @@ void get_arguments ( int argc, char **argv, struct _caller_options *pParam )
     int next_option;
     /* valid short options letters */
     const char* const short_options = "t:m:a:b:lifvch?";
+    unsigned long scanValue;
 
     if( pParam != NULL )
     {
@@ -223,11 +229,13 @@ void get_arguments ( int argc, char **argv, struct _caller_options *pParam )
                     pParam->eeOptFlags |= OPTION_TYPE_SET;
                     break;
                 case 'm':
-                    sscanf(optarg, "%x", &pParam->eeMagicOpt);
+                    sscanf(optarg, "%x", &scanValue);
+                    pParam->eeMagicOpt = (uint16_t) scanValue;
                     pParam->eeOptFlags |= OPTION_MAGIC_SET;
                     break;
                 case 'a':
-                    sscanf(optarg, "%x", &pParam->eeSlaveAddrOpt);
+                    sscanf(optarg, "%x", &scanValue);
+                    pParam->eeSlaveAddrOpt = (uint16_t) scanValue;
                     pParam->eeOptFlags |= OPTION_ADDR_SET;
                     break;
                 case 'b':
@@ -256,8 +264,8 @@ void get_arguments ( int argc, char **argv, struct _caller_options *pParam )
                     break;
                 case 'h':
                 case '?':
-                    help();
                     dumpArgs( pParam );
+                    help();
                     // help();
                     break;
                 default:
@@ -268,7 +276,10 @@ void get_arguments ( int argc, char **argv, struct _caller_options *pParam )
 
 }
 
-#define ERROR_NULL  -1
+#define ERROR_NULL          -1
+#define ERROR_NO_TYPE_MAGIC -2
+#define ERROR_I2C_PARAM     -3
+#define USER_ABORT          -4
 
 int listKnownTypes( i2cEEPROM *pDevice, struct _caller_options *pParam )
 {
@@ -348,15 +359,38 @@ int check4EEPROM( i2cEEPROM *pDevice, struct _caller_options *pParam )
 int infoOnEEPROM( i2cEEPROM *pDevice, struct _caller_options *pParam )
 {
     int retVal = 0;
+    uint16_t rdMagic;
+    uint16_t rdType;
 
     if( pDevice != NULL && pParam != (struct _caller_options*) NULL )
     {
         if( (pParam->eeOptFlags & (OPTION_ADDR_SET|OPTION_BUS_SET)) ==
                 (OPTION_ADDR_SET|OPTION_BUS_SET) )
         {
-            if( pDevice->eeOpen( pParam->eeBusNoOpt, 
+            if( retVal = pDevice->eeOpen( pParam->eeBusNoOpt, 
                                  pParam->eeSlaveAddrOpt ) == E_EE_SUCCESS )
             {
+                if( (retVal = pDevice->eeTypeDetect( &rdMagic, &rdType )) == 
+                    E_EE_SUCCESS)
+                {
+                    if( (retVal = pDevice->eeTypeSet( rdType )) ==
+                        E_EE_SUCCESS )
+                    {
+fprintf(stderr, "Got magic = %4x and type = %d\n", rdMagic, rdType);
+                        pDevice->eeInfo();
+                    }
+                    else
+                    {
+fprintf(stderr, "type %d invalid?\n", rdType);
+fprintf(stderr, "retVal = %d\n", retVal);
+                    }
+                }
+                else
+                {
+fprintf(stderr, "there seems to be no valid ID!\n");
+fprintf(stderr, "retVal = %d\n", retVal);
+                }
+
                 fprintf(stderr, "close device\n");
                 pDevice->eeClose();
             }
@@ -369,6 +403,34 @@ int infoOnEEPROM( i2cEEPROM *pDevice, struct _caller_options *pParam )
     return( retVal );
 }
 
+bool confirm_YN(char defaultValue)
+{
+    bool retVal = false;
+    char answer;
+
+    printf("[y]es/[n]o: (%c) ", defaultValue); 
+    answer = fgetc(stdin);
+
+// printf("\nanswer -> %c[%x]\n", answer, answer);
+
+    if( answer == 0x0a )
+    {
+        answer = defaultValue;
+    }
+
+    switch( answer )
+    {
+        case 'y':
+        case 'Y':
+            retVal = true;
+            break;
+        default:
+            retVal = false;
+            break;
+    }
+
+    return( retVal );
+}
 
 int initializeEEPROM( i2cEEPROM *pDevice, struct _caller_options *pParam )
 {
@@ -379,25 +441,47 @@ int initializeEEPROM( i2cEEPROM *pDevice, struct _caller_options *pParam )
         if( (pParam->eeOptFlags & (OPTION_ADDR_SET|OPTION_BUS_SET)) ==
                 (OPTION_ADDR_SET|OPTION_BUS_SET) )
         {
-            if( (pParam->eeOptFlags & (OPTION_TYPE_SET|OPTION_MAGIC_SET)) == 
-                    (OPTION_TYPE_SET|OPTION_MAGIC_SET) )
+            if( (pParam->eeOptFlags & OPTION_TYPE_SET) == OPTION_TYPE_SET )
             {
-                if( pDevice->eeOpen( pParam->eeBusNoOpt, 
-                                 pParam->eeSlaveAddrOpt ) == E_EE_SUCCESS )
+                if( (retVal = pDevice->eeOpen( pParam->eeBusNoOpt, 
+                                 pParam->eeSlaveAddrOpt )) == E_EE_SUCCESS )
                 {
-                    // pParam->eeTypeOpt
-                    // pParam->eeMagicOpt
-                    // pParam->eeSlaveAddrOpt
-                    // pParam->eeBusNoOpt
-                    // pParam->eeListOpt
-                    // pParam->eeInfoOpt
-                    // pParam->eeForceOpt
-                    // pParam->eeVerboseOpt
-                    // pParam->eeCheckOopt
-                    // fprintf(stderr, "close device\n");
+                    if( (retVal = pDevice->eeTypeSet( pParam->eeTypeOpt )) ==
+                        E_EE_SUCCESS )
+                    {
+                        if( !pParam->eeForceOpt )
+                        {
+printf("Write magic=%x and type=%x to EEPROM at address=%x on i2c-bus %d?\n", 
+       pParam->eeMagicOpt, pParam->eeTypeOpt, pParam->eeSlaveAddrOpt, 
+       pParam->eeBusNoOpt );
+
+                            if( confirm_YN('n') )
+                            {
+                                retVal = pDevice->eeInit();
+                            }
+                            else
+                            {
+                                printf("\nabgebrochen!\n");
+                                retVal = USER_ABORT;
+                            }
+                        }
+                        else
+                        {
+                            retVal = pDevice->eeInit();
+                        }
+                    }
+
                     pDevice->eeClose();
                 }
             }
+            else
+            {
+                retVal = ERROR_NO_TYPE_MAGIC;
+            }
+        }
+        else
+        {
+            retVal = ERROR_I2C_PARAM;
         }
     }
     else
